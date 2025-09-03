@@ -208,7 +208,7 @@ class ThreadReconstructor:
                 print(conv)
                 raise
             last_comment_id = thread_ids[-1]['id']
-            utterances_dic = {u.id:utterance_from_comment(u, has_attack=0, mod=False, unique_id=last_comment_id) for u in conv}
+            utterances_dic = {u.id:utterance_from_comment(u, has_attack=0, mod=False, unique_id=u.id) for u in conv}
             row_infos[thread_ids_str] = {"thread_ids": thread_ids, "uttr": utterances_dic, "mod_comment_id":comment_id}
             # row_infos.append(row_info)
         row_infos = list(row_infos.values())
@@ -400,7 +400,9 @@ class CommentTraverser():
         for first_level_comment in level_comments:
             self.travese_recursively(first_level_comment, moded_comment_id, [submission])
     
-    def travese_recursively(self, comment, moded_comment_id, comment_history=[], depth=1, max_num=3):
+    def travese_recursively(self, comment, moded_comment_id, comment_history=None, depth=1, max_num=3):
+        if comment_history is None:
+            comment_history = []
         if depth > self.max_depth:
             self.unmoded_conversations[moded_comment_id].append(comment_history)
             return 
@@ -419,8 +421,8 @@ class CommentTraverser():
 
         sub_comments = random.sample(sub_comments, min(max_num, len(sub_comments)))
         for sub_comment in sub_comments:
-            comment_history.append(sub_comment)
-            self.travese_recursively(sub_comment, moded_comment_id, comment_history, depth+1)
+            new_history = comment_history + [sub_comment]
+            self.travese_recursively(sub_comment, moded_comment_id, new_history, depth+1)
     
     def get_unmoded(self, moded_comment, moded_comment_id):
         self.traverse(moded_comment, moded_comment_id)
@@ -445,3 +447,21 @@ if __name__ == "__main__":
 
     scraper = ThreadReconstructor(path_out, num_max_comment, save_every=150, max_num_unmod=2)
     scraper.reconstruct(mapped_comments)
+    
+    # Report deleted comment statistics
+    deleted_summary = scraper.scraper.get_deleted_comment_summary()
+    print(f"\n=== DELETED COMMENT TRACKING SUMMARY ===")
+    print(f"Total deleted/removed comments encountered: {deleted_summary['total_deleted']}")
+    print(f"  • Moderator removed ([removed]): {deleted_summary['moderated_only']}")
+    print(f"  • User deleted ([deleted]) + fetch errors: {deleted_summary['user_deleted']}")
+    print(f"\nLog files created:")
+    print(f"  • All deleted content: {deleted_summary['log_file']}")
+    if deleted_summary['moderated_log_exists']:
+        print(f"  • Moderated content only: {deleted_summary['moderated_log_file']}")
+    
+    if deleted_summary['log_exists']:
+        print(f"\n📁 Save these log files for potential future restoration!")
+        print(f"💡 Use 'python src/restore_deleted_comments.py <log_file>' to analyze")
+    else:
+        print("No deleted comments encountered in this run.")
+    print("=" * 60)
